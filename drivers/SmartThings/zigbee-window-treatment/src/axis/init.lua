@@ -14,6 +14,9 @@ local Level = zcl_clusters.Level
 local PowerConfiguration = zcl_clusters.PowerConfiguration
 local WindowCovering = zcl_clusters.WindowCovering
 
+local LATEST_TARGET_LEVEL = "latest_target_level"
+local TARGET_LEVEL_TIME_OUT = "_target_level_timeout"
+local TARGET_LEVEL_TIME_OUT_SECONDS = 30
 local SOFTWARE_VERSION = "software_version"
 local DEFAULT_LEVEL = 0
 
@@ -32,6 +35,40 @@ end
 local function window_shade_level_cmd_handler(driver, device, command)
   local level = command.args.shadeLevel
   window_shade_set_level(device, command, level)
+end
+
+local function window_shade_step_level_cmd(driver, device, command)
+  -- Support both args.stepSize (named) and args[1] (array) formats
+  local step = command.args.stepSize or command.args[1]
+
+  local latest_target_level = device:get_field(LATEST_TARGET_LEVEL)
+  local current_level = latest_target_level or
+    device:get_latest_state("main", capabilities.windowShadeLevel.ID, capabilities.windowShadeLevel.shadeLevel.NAME) or 0
+
+  local target_level = current_level + step
+  if target_level > 100 then
+    target_level = 100
+  elseif target_level < 0 then
+    target_level = 0
+  end
+  target_level = utils.round(target_level)
+
+  device:set_field(LATEST_TARGET_LEVEL, target_level)
+
+  -- Cancel previous timeout timer if exists
+  local old_timer = device:get_field(TARGET_LEVEL_TIME_OUT)
+  if old_timer ~= nil then
+    device.thread:cancel_timer(old_timer)
+  end
+
+  -- Set 30 second timeout timer to ensure target_level is cleared
+  local timer = device.thread:call_with_delay(TARGET_LEVEL_TIME_OUT_SECONDS, function(d)
+    device:set_field(LATEST_TARGET_LEVEL, nil)
+    device:set_field(TARGET_LEVEL_TIME_OUT, nil)
+  end)
+  device:set_field(TARGET_LEVEL_TIME_OUT, timer)
+
+  window_shade_set_level(device, command, target_level)
 end
 
 local function window_shade_preset_cmd(driver, device, command)
@@ -68,6 +105,20 @@ end
 
 local function level_attr_handler(driver, device, value, zb_rx)
   local level = utils.round((value.value/254.0) * 100)
+  local latest_target_level = device:get_field(LATEST_TARGET_LEVEL)
+
+  if latest_target_level ~= nil then
+    -- Active step control
+    if level == utils.round(latest_target_level) then
+      -- Device reached target position, clear target marker and timeout timer
+      device:set_field(LATEST_TARGET_LEVEL, nil)
+      local timer = device:get_field(TARGET_LEVEL_TIME_OUT)
+      if timer ~= nil then
+        device.thread:cancel_timer(timer)
+        device:set_field(TARGET_LEVEL_TIME_OUT, nil)
+      end
+    end
+  end
   device:emit_event(capabilities.windowShadeLevel.shadeLevel(level))
   handle_window_shade(device, level)
 end
@@ -120,6 +171,9 @@ local axis_handler = {
     },
     [capabilities.refresh.ID] = {
       [capabilities.refresh.commands.refresh.NAME] = do_refresh,
+    },
+    [capabilities.statelessWindowShadeLevelStep.ID] = {
+      [capabilities.statelessWindowShadeLevelStep.commands.stepShadeLevel.NAME] = window_shade_step_level_cmd
     }
   },
   zigbee_handlers = {
