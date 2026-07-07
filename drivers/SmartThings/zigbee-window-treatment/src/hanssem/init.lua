@@ -20,12 +20,17 @@ local data_types = require "st.zigbee.data_types"
 local ZigbeeConstants = require "st.zigbee.constants"
 local generic_body = require "st.zigbee.generic_body"
 local window_shade_utils = require "window_shade_utils"
+local utils = require "st.utils"
 
 local TUYA_CLUSTER = 0xEF00
 local DP_TYPE_VALUE = "\x02"
 local DP_TYPE_ENUM = "\x04"
 
 local SeqNum = 0
+
+local LATEST_TARGET_LEVEL = "latest_target_level"
+local TARGET_LEVEL_TIME_OUT = "_target_level_timeout"
+local TARGET_LEVEL_TIME_OUT_SECONDS = 30
 
 -------- Send Command Function for Tuya Zigbee device -------------
 -- ZigbeeMessageTx:
@@ -150,6 +155,40 @@ local function SetShadeLevelHandler(driver, device, capability_command)
   SendCommand(device, DP_ID_SET_POSITION, DP_TYPE_VALUE, string.pack(">I4", capability_command.args.shadeLevel))
 end
 
+local function window_shade_step_level_cmd(driver, device, command)
+  -- Support both args.stepSize (named) and args[1] (array) formats
+  local step = command.args.stepSize or command.args[1]
+
+  local latest_target_level = device:get_field(LATEST_TARGET_LEVEL)
+  local current_level = latest_target_level or
+    device:get_latest_state("main", capabilities.windowShadeLevel.ID, capabilities.windowShadeLevel.shadeLevel.NAME) or 0
+
+  local target_level = current_level + step
+  if target_level > 100 then
+    target_level = 100
+  elseif target_level < 0 then
+    target_level = 0
+  end
+  target_level = utils.round(target_level)
+
+  device:set_field(LATEST_TARGET_LEVEL, target_level)
+
+  -- Cancel previous timeout timer if exists
+  local old_timer = device:get_field(TARGET_LEVEL_TIME_OUT)
+  if old_timer ~= nil then
+    device.thread:cancel_timer(old_timer)
+  end
+
+  -- Set 30 second timeout timer to ensure target_level is cleared
+  local timer = device.thread:call_with_delay(TARGET_LEVEL_TIME_OUT_SECONDS, function(d)
+    device:set_field(LATEST_TARGET_LEVEL, nil)
+    device:set_field(TARGET_LEVEL_TIME_OUT, nil)
+  end)
+  device:set_field(TARGET_LEVEL_TIME_OUT, timer)
+
+  SendCommand(device, DP_ID_SET_POSITION, DP_TYPE_VALUE, string.pack(">I4", target_level))
+end
+
 local function PresetPositionHandler(driver, device, capability_command)
   local level = window_shade_utils.get_preset_level(device, capability_command.component)
   SetShadeLevelHandler(driver, device, {args = { shadeLevel = level }})
@@ -171,6 +210,19 @@ local function TuyaClusterRx(driver, device, zb_rx)
   elseif dp_id == 2 then -- 0x02: Set Curtain Position in Percentage
     emit_event_movement_status(device, value)
   elseif dp_id == 3 then -- 0x03: Current Curtain Position
+    local latest_target_level = device:get_field(LATEST_TARGET_LEVEL)
+    if latest_target_level ~= nil then
+      -- Active step control
+      if value == utils.round(latest_target_level) then
+        -- Device reached target position, clear target marker and timeout timer
+        device:set_field(LATEST_TARGET_LEVEL, nil)
+        local timer = device:get_field(TARGET_LEVEL_TIME_OUT)
+        if timer ~= nil then
+          device.thread:cancel_timer(timer)
+          device:set_field(TARGET_LEVEL_TIME_OUT, nil)
+        end
+      end
+    end
     emit_event_final_position(device, value)
   elseif dp_id == 5 then -- 0x05: Reset Direction
     device:set_field("DirectionChange",1)
@@ -215,7 +267,8 @@ local hanssem_window_treatment = {
   supported_capabilities = {
     capabilities.windowShade,
     capabilities.windowShadePreset,
-    capabilities.windowShadeLevel
+    capabilities.windowShadeLevel,
+    capabilities.statelessWindowShadeLevelStep
   },
   capability_handlers = {
     [capabilities.windowShade.ID] = {
@@ -228,6 +281,9 @@ local hanssem_window_treatment = {
     },
     [capabilities.windowShadeLevel.ID] = {
       [capabilities.windowShadeLevel.commands.setShadeLevel.NAME] = SetShadeLevelHandler
+    },
+    [capabilities.statelessWindowShadeLevelStep.ID] = {
+      [capabilities.statelessWindowShadeLevelStep.commands.stepShadeLevel.NAME] = window_shade_step_level_cmd
     }
   },
 --- See https://developer.smartthings.com/docs/edge-device-drivers/zigbee/zigbee_message_handlers.html for detailed
