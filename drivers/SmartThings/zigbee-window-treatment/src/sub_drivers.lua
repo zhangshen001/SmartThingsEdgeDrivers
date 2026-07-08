@@ -15,5 +15,7 @@ local sub_drivers = {
    lazy_load_if_possible("screen-innovations"),
    lazy_load_if_possible("VIVIDSTORM"),
    lazy_load_if_possible("HOPOsmart"),
+   -- Generic stateless handlers (must be after vendor-specific drivers)
+   lazy_load_if_possible("stateless_handler"),
 }
 return sub_drivers
