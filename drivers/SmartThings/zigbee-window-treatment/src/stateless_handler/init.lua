@@ -121,11 +121,7 @@ local function step_shade_level_handler(driver, device, command)
   end
 end
 
--- Handle device position report from WindowCovering cluster, Level cluster, or AnalogOutput cluster
--- Parameters:
---   reported_level: The raw level value from the device (0-100 percentage)
---   zb_rx: The zigbee receive message for endpoint info
-local function shade_level_report_handler(driver, device, reported_level, zb_rx)
+local function shade_level_report_handler(driver, device, value, zb_rx)
   local latest_target_level = device:get_field(LATEST_TARGET_LEVEL)
   if latest_target_level ~= nil then
       -- Device reached target position, clear target marker and timeout timer
@@ -133,27 +129,6 @@ local function shade_level_report_handler(driver, device, reported_level, zb_rx)
   end
 end
 
--- Handle device position report from Level cluster (for Feibit, Axis devices)
--- Level cluster reports 0-254, convert to percentage 0-100
-local function level_report_handler(driver, device, value, zb_rx)
-  local level_value = value.value or 0
-  local reported_level = math.floor(level_value / 254.0 * 100)
-  shade_level_report_handler(driver, device, reported_level, zb_rx)
-end
-
--- Handle device position report from WindowCovering cluster
--- Reports 0-100 percentage directly
-local function window_covering_report_handler(driver, device, value, zb_rx)
-  local reported_level = value.value or 0
-  shade_level_report_handler(driver, device, reported_level, zb_rx)
-end
-
--- Handle device position report from AnalogOutput cluster (for Aqara devices)
--- Reports 0-100 percentage directly
-local function analog_output_report_handler(driver, device, value, zb_rx)
-  local reported_level = value.value or 0
-  shade_level_report_handler(driver, device, reported_level, zb_rx)
-end
 
 local stateless_handler = {
   NAME = "Zigbee Window Treatment Stateless Step Handlers",
@@ -165,13 +140,13 @@ local stateless_handler = {
   zigbee_handlers = {
     attr = {
       [clusters.WindowCovering.ID] = {
-        [clusters.WindowCovering.attributes.CurrentPositionLiftPercentage.ID] = window_covering_report_handler,
+        [clusters.WindowCovering.attributes.CurrentPositionLiftPercentage.ID] = shade_level_report_handler,
       },
       [clusters.Level.ID] = {
-        [clusters.Level.attributes.CurrentLevel.ID] = level_report_handler,
+        [clusters.Level.attributes.CurrentLevel.ID] = shade_level_report_handler,
       },
       [clusters.AnalogOutput.ID] = {
-        [clusters.AnalogOutput.attributes.PresentValue.ID] = analog_output_report_handler,
+        [clusters.AnalogOutput.attributes.PresentValue.ID] = shade_level_report_handler,
       },
     },
   },
