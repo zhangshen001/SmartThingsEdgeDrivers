@@ -77,6 +77,7 @@ local BRAND_CONFIGS = {
     mfr = "",
     models = { "TS0601" },
     match_by_model = true,  -- Match by model only, not manufacturer
+    use_tuya_cluster = true,  -- Use Tuya custom cluster 0xEF00
   },
   {
     name = "rooms-beautiful",
