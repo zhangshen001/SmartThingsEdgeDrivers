@@ -26,8 +26,6 @@ end
 
 -- Field keys for tracking target level and timeout timer
 local LATEST_TARGET_LEVEL = "__latest_target_level"
-local TARGET_LEVEL_TIME_OUT = "__target_level_timeout"
-local TARGET_LEVEL_TIME_OUT_SECONDS = 30
 
 -- Get brand configuration for a device
 local function get_brand_config(device)
@@ -93,19 +91,6 @@ local function step_shade_level_handler(driver, device, command)
   -- Set target_level for tracking (store UI value)
   device:set_field(LATEST_TARGET_LEVEL, ui_target_level)
 
-  -- Cancel previous timeout timer if exists
-  local old_timer = device:get_field(TARGET_LEVEL_TIME_OUT)
-  if old_timer ~= nil then
-    device.thread:cancel_timer(old_timer)
-  end
-
-  -- Set timeout timer to ensure target_level is cleared after operation completes
-  local timer = device.thread:call_with_delay(TARGET_LEVEL_TIME_OUT_SECONDS, function(d)
-    device:set_field(LATEST_TARGET_LEVEL, nil)
-    device:set_field(TARGET_LEVEL_TIME_OUT, nil)
-  end)
-  device:set_field(TARGET_LEVEL_TIME_OUT, timer)
-
   -- Send command based on brand configuration
   if brand_config and brand_config.use_level_cluster then
     -- Feibit/Axis uses Level cluster
@@ -142,27 +127,9 @@ end
 --   zb_rx: The zigbee receive message for endpoint info
 local function shade_level_report_handler(driver, device, reported_level, zb_rx)
   local latest_target_level = device:get_field(LATEST_TARGET_LEVEL)
-  
-  -- Get brand configuration for inversion handling
-  local brand_config = get_brand_config(device)
-  
-  -- Apply brand-specific inversion if needed (device reports inverted value)
-  local ui_reported_level = reported_level
-  if brand_config and brand_config.invert_level then
-    ui_reported_level = 100 - reported_level
-  end
-
   if latest_target_level ~= nil then
-    -- Active step control: check if device reached target position (compare UI values)
-    if utils.round(ui_reported_level) == utils.round(latest_target_level) then
       -- Device reached target position, clear target marker and timeout timer
       device:set_field(LATEST_TARGET_LEVEL, nil)
-      local timer = device:get_field(TARGET_LEVEL_TIME_OUT)
-      if timer ~= nil then
-        device.thread:cancel_timer(timer)
-        device:set_field(TARGET_LEVEL_TIME_OUT, nil)
-      end
-    end
   end
 end
 
