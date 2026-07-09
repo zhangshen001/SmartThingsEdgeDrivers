@@ -186,10 +186,13 @@ test.register_coroutine_test(
   "Window shade state closed",
   function()
     test.socket.capability:__set_channel_ordering("relaxed")
+    -- AnalogOutput reports 0 (device: 0 = fully open)
+    -- emit_shade_level_event inverts: UI = 100 - 0 = 100
+    -- emit_shade_event: level = 0 -> closed() (uses raw device value)
     test.socket.zigbee:__queue_receive(
       {
         mock_device.id,
-        AnalogOutput.attributes.PresentValue:build_test_attr_report(mock_device, SinglePrecisionFloat(0, -127, 0))
+        AnalogOutput.attributes.PresentValue:build_test_attr_report(mock_device, 0)
       }
     )
     test.socket.capability:__expect_send(
@@ -208,10 +211,13 @@ test.register_coroutine_test(
   "Window shade state open",
   function()
     test.socket.capability:__set_channel_ordering("relaxed")
+    -- AnalogOutput reports 100 (device: 100 = fully closed)
+    -- emit_shade_level_event inverts: UI = 100 - 100 = 0
+    -- emit_shade_event: level = 100 >= 100 -> open() (uses raw device value)
     test.socket.zigbee:__queue_receive(
       {
         mock_device.id,
-        AnalogOutput.attributes.PresentValue:build_test_attr_report(mock_device, SinglePrecisionFloat(0, 6, 0.5625))
+        AnalogOutput.attributes.PresentValue:build_test_attr_report(mock_device, 100)
       }
     )
     test.socket.capability:__expect_send(
@@ -420,6 +426,10 @@ test.register_coroutine_test(
     mock_version_device:set_field(APPLICATION_VERSION, 34, { persist = true })
     test.wait_for_events()
 
+    -- Version 34 uses WindowCovering.CurrentPositionLiftPercentage (raw device value)
+    -- Device reports 0 (fully closed for version 34)
+    -- emit_shade_level_event inverts: UI = 100 - 0 = 100
+    -- emit_shade_event: level = 0 -> closed() (uses raw device value)
     test.socket.zigbee:__queue_receive(
       {
         mock_version_device.id,
@@ -450,6 +460,10 @@ test.register_coroutine_test(
     mock_version_device:set_field(APPLICATION_VERSION, 34, { persist = true })
     test.wait_for_events()
 
+    -- Version 34 uses WindowCovering.CurrentPositionLiftPercentage (raw device value)
+    -- Device reports 100 (fully open for version 34)
+    -- emit_shade_level_event inverts: UI = 100 - 100 = 0
+    -- emit_shade_event: level = 100 >= 100 -> open() (uses raw device value)
     test.socket.zigbee:__queue_receive(
       {
         mock_version_device.id,
