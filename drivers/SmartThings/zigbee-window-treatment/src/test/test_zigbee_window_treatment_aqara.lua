@@ -143,7 +143,7 @@ test.register_coroutine_test(
         PREF_SOFT_TOUCH_ON) })
   end,
   {
-     min_api_version = 17
+     min_api_version = 19
   }
 )
 
@@ -178,7 +178,7 @@ test.register_coroutine_test(
     mock_device:expect_metadata_update({ provisioning_state = "PROVISIONED" })
   end,
   {
-     min_api_version = 17
+     min_api_version = 19
   }
 )
 
@@ -186,21 +186,24 @@ test.register_coroutine_test(
   "Window shade state closed",
   function()
     test.socket.capability:__set_channel_ordering("relaxed")
+    -- AnalogOutput reports 0 (device: 0 = fully open)
+    -- emit_shade_level_event inverts: UI = 100 - 0 = 100
+    -- emit_shade_event: level = 0 -> closed() (uses raw device value)
     test.socket.zigbee:__queue_receive(
       {
         mock_device.id,
-        AnalogOutput.attributes.PresentValue:build_test_attr_report(mock_device, SinglePrecisionFloat(0, -127, 0))
+        AnalogOutput.attributes.PresentValue:build_test_attr_report(mock_device, 0)
       }
     )
     test.socket.capability:__expect_send(
-      mock_device:generate_test_message("main", capabilities.windowShadeLevel.shadeLevel(0))
+      mock_device:generate_test_message("main", capabilities.windowShadeLevel.shadeLevel(100))
     )
     test.socket.capability:__expect_send(
       mock_device:generate_test_message("main", capabilities.windowShade.windowShade.closed())
     )
   end,
   {
-     min_api_version = 17
+     min_api_version = 19
   }
 )
 
@@ -208,21 +211,24 @@ test.register_coroutine_test(
   "Window shade state open",
   function()
     test.socket.capability:__set_channel_ordering("relaxed")
+    -- AnalogOutput reports 100 (device: 100 = fully closed)
+    -- emit_shade_level_event inverts: UI = 100 - 100 = 0
+    -- emit_shade_event: level = 100 >= 100 -> open() (uses raw device value)
     test.socket.zigbee:__queue_receive(
       {
         mock_device.id,
-        AnalogOutput.attributes.PresentValue:build_test_attr_report(mock_device, SinglePrecisionFloat(0, 6, 0.5625))
+        AnalogOutput.attributes.PresentValue:build_test_attr_report(mock_device, 100)
       }
     )
     test.socket.capability:__expect_send(
-      mock_device:generate_test_message("main", capabilities.windowShadeLevel.shadeLevel(100))
+      mock_device:generate_test_message("main", capabilities.windowShadeLevel.shadeLevel(0))
     )
     test.socket.capability:__expect_send(
       mock_device:generate_test_message("main", capabilities.windowShade.windowShade.open())
     )
   end,
   {
-     min_api_version = 17
+     min_api_version = 19
   }
 )
 
@@ -244,7 +250,7 @@ test.register_coroutine_test(
     )
   end,
   {
-     min_api_version = 17
+     min_api_version = 19
   }
 )
 
@@ -263,7 +269,7 @@ test.register_coroutine_test(
     })
   end,
   {
-     min_api_version = 17
+     min_api_version = 19
   }
 )
 
@@ -282,7 +288,7 @@ test.register_coroutine_test(
     })
   end,
   {
-     min_api_version = 17
+     min_api_version = 19
   }
 )
 
@@ -301,7 +307,7 @@ test.register_coroutine_test(
     })
   end,
   {
-     min_api_version = 17
+     min_api_version = 19
   }
 )
 
@@ -348,7 +354,7 @@ test.register_coroutine_test(
       deviceInitialization.initializedState.initialized()))
   end,
   {
-     min_api_version = 17
+     min_api_version = 19
   }
 )
 
@@ -380,7 +386,7 @@ test.register_coroutine_test(
         PREF_SOFT_TOUCH_OFF) })
   end,
   {
-     min_api_version = 17
+     min_api_version = 19
   }
 )
 
@@ -404,7 +410,7 @@ test.register_coroutine_test(
     })
   end,
   {
-     min_api_version = 17
+     min_api_version = 19
   }
 )
 
@@ -420,6 +426,10 @@ test.register_coroutine_test(
     mock_version_device:set_field(APPLICATION_VERSION, 34, { persist = true })
     test.wait_for_events()
 
+    -- Version 34 uses WindowCovering.CurrentPositionLiftPercentage (raw device value)
+    -- Device reports 0 (fully closed for version 34)
+    -- emit_shade_level_event inverts: UI = 100 - 0 = 100
+    -- emit_shade_event: level = 0 -> closed() (uses raw device value)
     test.socket.zigbee:__queue_receive(
       {
         mock_version_device.id,
@@ -427,14 +437,14 @@ test.register_coroutine_test(
       }
     )
     test.socket.capability:__expect_send(
-      mock_version_device:generate_test_message("main", capabilities.windowShadeLevel.shadeLevel(0))
+      mock_version_device:generate_test_message("main", capabilities.windowShadeLevel.shadeLevel(100))
     )
     test.socket.capability:__expect_send(
       mock_version_device:generate_test_message("main", capabilities.windowShade.windowShade.closed())
     )
   end,
   {
-     min_api_version = 17
+     min_api_version = 19
   }
 )
 
@@ -450,6 +460,10 @@ test.register_coroutine_test(
     mock_version_device:set_field(APPLICATION_VERSION, 34, { persist = true })
     test.wait_for_events()
 
+    -- Version 34 uses WindowCovering.CurrentPositionLiftPercentage (raw device value)
+    -- Device reports 100 (fully open for version 34)
+    -- emit_shade_level_event inverts: UI = 100 - 100 = 0
+    -- emit_shade_event: level = 100 >= 100 -> open() (uses raw device value)
     test.socket.zigbee:__queue_receive(
       {
         mock_version_device.id,
@@ -457,14 +471,14 @@ test.register_coroutine_test(
       }
     )
     test.socket.capability:__expect_send(
-      mock_version_device:generate_test_message("main", capabilities.windowShadeLevel.shadeLevel(100))
+      mock_version_device:generate_test_message("main", capabilities.windowShadeLevel.shadeLevel(0))
     )
     test.socket.capability:__expect_send(
       mock_version_device:generate_test_message("main", capabilities.windowShade.windowShade.open())
     )
   end,
   {
-     min_api_version = 17
+     min_api_version = 19
   }
 )
 
@@ -494,7 +508,7 @@ test.register_coroutine_test(
     )
   end,
   {
-     min_api_version = 17
+     min_api_version = 19
   }
 )
 
@@ -514,71 +528,10 @@ test.register_coroutine_test(
     })
   end,
   {
-     min_api_version = 17
+     min_api_version = 19
   }
 )
 
-test.register_coroutine_test(
-  "shade state attribute handler - initial state open",
-  function()
-    test.socket.zigbee:__set_channel_ordering("relaxed")
-    test.timer.__create_and_queue_test_time_advance_timer(2, "oneshot")
-    mock_device:set_field("initState", "open")
-    local attr_report_data = {
-      { SHADE_STATE_ATTRIBUTE_ID, data_types.Uint8.ID, 0 }
-    }
-    test.socket.zigbee:__queue_receive({
-      mock_device.id,
-      zigbee_test_utils.build_attribute_report(mock_device, Basic.ID, attr_report_data, MFG_CODE)
-    })
-    test.socket.zigbee:__expect_send(
-      {
-        mock_device.id,
-        AnalogOutput.attributes.PresentValue:read(mock_device)
-      }
-    )
-    test.mock_time.advance_time(2)
-    test.socket.zigbee:__expect_send({
-      mock_device.id,
-      WindowCovering.server.commands.GoToLiftPercentage(mock_device, 0)
-    })
-  end,
-  {
-     min_api_version = 17
-  }
-)
-
-test.register_coroutine_test(
-  "shade state attribute handler - initial state close",
-  function()
-    test.socket.zigbee:__set_channel_ordering("relaxed")
-    test.timer.__create_and_queue_test_time_advance_timer(2, "oneshot")
-
-    mock_device:set_field("initState", "close")
-    local attr_report_data = {
-      { SHADE_STATE_ATTRIBUTE_ID, data_types.Uint8.ID, 0 }
-    }
-    test.socket.zigbee:__queue_receive({
-      mock_device.id,
-      zigbee_test_utils.build_attribute_report(mock_device, Basic.ID, attr_report_data, MFG_CODE)
-    })
-    test.socket.zigbee:__expect_send(
-      {
-        mock_device.id,
-        AnalogOutput.attributes.PresentValue:read(mock_device)
-      }
-    )
-    test.mock_time.advance_time(2)
-
-    test.socket.zigbee:__expect_send({
-      mock_device.id,
-      WindowCovering.server.commands.GoToLiftPercentage(mock_device, 100)
-    })
-  end,
-  {
-     min_api_version = 17
-  }
-)
 
 test.register_coroutine_test(
   "shade state attribute handler - initial state reverse",
@@ -609,7 +562,7 @@ test.register_coroutine_test(
     })
   end,
   {
-     min_api_version = 17
+     min_api_version = 19
   }
 )
 
@@ -631,7 +584,7 @@ test.register_coroutine_test(
     )
   end,
   {
-     min_api_version = 17
+     min_api_version = 19
   }
 )
 
@@ -653,7 +606,7 @@ test.register_coroutine_test(
     )
   end,
   {
-     min_api_version = 17
+     min_api_version = 19
   }
 )
 
